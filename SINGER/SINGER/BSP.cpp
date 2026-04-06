@@ -72,6 +72,7 @@ void BSP::forward(double rho) {
     curr_index += 1;
     recomb_sum = inner_product(recomb_probs.begin(), recomb_probs.end(), forward_probs[curr_index - 1].begin(), 0.0);
     forward_probs.push_back(recomb_probs);
+    #pragma omp simd
     for (int i = 0; i < dim; i++) {
         forward_probs[curr_index][i] = forward_probs[curr_index - 1][i]*(1 - recomb_probs[i]) + recomb_sum*recomb_weights[i];
     }

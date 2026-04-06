@@ -102,6 +102,19 @@ shared_ptr<Interval> create_interval(Branch b, double tl, double tu, int init_po
     return make_shared<Interval>(b, tl, tu, init_pos);
 }
 
+MemoryPool<Interval> &get_interval_pool() {
+    static MemoryPool<Interval> pool;
+    return pool;
+}
+
+Interval *pool_create_interval(Branch b, double tl, double tu, int init_pos) {
+    return get_interval_pool().construct(b, tl, tu, init_pos);
+}
+
+void pool_destroy_interval(Interval *ptr) {
+    get_interval_pool().deallocate(ptr);
+}
+
 Interval_info::Interval_info() {
 }
 

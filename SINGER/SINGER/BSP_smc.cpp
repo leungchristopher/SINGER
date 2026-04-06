@@ -12,7 +12,7 @@ BSP_smc::BSP_smc() {}
 BSP_smc::~BSP_smc() {
     for (auto &x : state_spaces) {
         for (Interval *interval : x.second) {
-            delete interval;
+            pool_destroy_interval(interval);
         }
     }
     vector<vector<double>>().swap(forward_probs);
@@ -44,7 +44,7 @@ void BSP_smc::start(set<Branch> &branches, double t) {
             lb = max(b.lower_node->time, cut_time);
             ub = b.upper_node->time;
             p = cc->weight(lb, ub);
-            new_interval = new Interval(b, lb, ub, curr_index);
+            new_interval = pool_create_interval(b, lb, ub, curr_index);
             curr_intervals.push_back(new_interval);
             temp.push_back(p);
         }
@@ -77,6 +77,7 @@ void BSP_smc::forward(double rho) {
     curr_index += 1;
     recomb_sum = inner_product(recomb_probs.begin(), recomb_probs.end(), forward_probs[curr_index - 1].begin(), 0.0);
     forward_probs.push_back(recomb_probs);
+    #pragma omp simd
     for (int i = 0; i < dim; i++) {
         forward_probs[curr_index][i] = forward_probs[curr_index - 1][i]*(1 - recomb_probs[i]) + recomb_sum*recomb_weights[i];
     }
@@ -359,7 +360,7 @@ void BSP_smc::generate_intervals(Recombination &r) {
         p = accumulate(weights.begin(), weights.end(), 0.0);
         assert(!isnan(p));
         if (lb == max(cut_time, b.lower_node->time) and ub == b.upper_node->time) { // full intervals
-            new_interval = new Interval(b, lb, ub, curr_index);
+            new_interval = pool_create_interval(b, lb, ub, curr_index);
             temp_intervals.push_back(new_interval);
             temp.push_back(p);
             if (weights.size() > 0) {
@@ -367,7 +368,7 @@ void BSP_smc::generate_intervals(Recombination &r) {
                 new_interval->source_intervals = move(intervals);
             }
         } else if (p >= cutoff) { // partial intervals
-            new_interval = new Interval(b, lb, ub, curr_index);
+            new_interval = pool_create_interval(b, lb, ub, curr_index);
             temp_intervals.push_back(new_interval);
             temp.push_back(p);
             if (weights.size() > 0) {
@@ -406,7 +407,7 @@ void BSP_smc::fast_generate_intervals(Recombination &r) {
         }
         if (lb == max(cut_time, b.lower_node->time) and ub == b.upper_node->time) { // full intervals
             curr_branches.insert(b);
-            new_interval = new Interval(b, lb, ub, curr_index);
+            new_interval = pool_create_interval(b, lb, ub, curr_index);
             curr_intervals.push_back(new_interval);
             temp.push_back(p);
             if (weights.size() > 0) {
@@ -414,7 +415,7 @@ void BSP_smc::fast_generate_intervals(Recombination &r) {
                 source_intervals[new_interval] = intervals;
             }
         } else if (p >= cutoff) { // partial intervals
-            new_interval = new Interval(b, lb, ub, curr_index);
+            new_interval = pool_create_interval(b, lb, ub, curr_index);
             curr_intervals.push_back(new_interval);
             temp.push_back(p);
             if (weights.size() > 0) {
@@ -427,7 +428,7 @@ void BSP_smc::fast_generate_intervals(Recombination &r) {
         if (curr_branches.count(b) == 0) {
             lb = max(cut_time, b.lower_node->time);
             ub = b.upper_node->time;
-            new_interval = new Interval(b, lb, ub, curr_index);
+            new_interval = pool_create_interval(b, lb, ub, curr_index);
             curr_intervals.push_back(new_interval);
             temp.push_back(0);
         }

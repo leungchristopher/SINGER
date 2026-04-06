@@ -521,6 +521,10 @@ void Sampler::fast_terminal_sample(int num_iters) {
 
 void Sampler::internal_sample(int num_iters, int spacing) {
     while (sample_index < num_iters) {
+        // Wait for any previous async write to complete
+        if (write_future.valid()) {
+            write_future.wait();
+        }
         cout << get_time() << " Iteration: " << to_string(sample_index) << endl;
         double updated_length = 0;
         cout << "Random seed: " << random_seed << endl;
@@ -529,7 +533,12 @@ void Sampler::internal_sample(int num_iters, int spacing) {
             Threader_smc threader = Threader_smc(bsp_c, tsp_q);
             threader.pe->penalty = penalty;
             threader.pe->ancestral_prob = polar;
-            tuple<double, Branch, double> cut_point = arg.sample_internal_cut();
+            tuple<double, Branch, double> cut_point;
+            if (smart_proposals) {
+                cut_point = arg.sample_internal_cut(); // TODO: weight by RF distance when implemented in ARG
+            } else {
+                cut_point = arg.sample_internal_cut();
+            }
             threader.internal_rethread(arg, cut_point);
             updated_length += arg.coordinates[threader.end_index] - arg.coordinates[threader.start_index];
             arg.clear_remove_info();
@@ -546,14 +555,25 @@ void Sampler::internal_sample(int num_iters, int spacing) {
         string recomb_file = output_prefix + "_recombs_" + to_string(sample_index) + ".txt";
         string mut_file = output_prefix + "_muts_" + to_string(sample_index) + ".txt";
         sample_index += 1;
-        arg.write(node_file, branch_file, recomb_file, mut_file);
+        // Async I/O: launch write in background thread
+        write_future = std::async(std::launch::async, [&, node_file, branch_file, recomb_file, mut_file]() {
+            arg.write(node_file, branch_file, recomb_file, mut_file);
+        });
         cout << "Number of trees: " << arg.recombinations.size() << endl;
         cout << "Number of flippings: " << arg.count_flipping() << endl;
+    }
+    // Wait for final write
+    if (write_future.valid()) {
+        write_future.wait();
     }
 }
 
 void Sampler::fast_internal_sample(int num_iters, int spacing) {
     while (sample_index < num_iters) {
+        // Wait for any previous async write to complete
+        if (write_future.valid()) {
+            write_future.wait();
+        }
         cout << get_time() << " Iteration: " << to_string(sample_index) << endl;
         double updated_length = 0;
         cout << "Random seed: " << random_seed << endl;
@@ -562,7 +582,12 @@ void Sampler::fast_internal_sample(int num_iters, int spacing) {
             Threader_smc threader = Threader_smc(bsp_c, tsp_q);
             threader.pe->penalty = penalty;
             threader.pe->ancestral_prob = polar;
-            tuple<double, Branch, double> cut_point = arg.sample_internal_cut();
+            tuple<double, Branch, double> cut_point;
+            if (smart_proposals) {
+                cut_point = arg.sample_internal_cut(); // TODO: weight by RF distance when implemented in ARG
+            } else {
+                cut_point = arg.sample_internal_cut();
+            }
             threader.fast_internal_rethread(arg, cut_point);
             updated_length += arg.coordinates[threader.end_index] - arg.coordinates[threader.start_index];
             arg.clear_remove_info();
@@ -579,9 +604,16 @@ void Sampler::fast_internal_sample(int num_iters, int spacing) {
         string recomb_file = output_prefix + "_fast_recombs_" + to_string(sample_index) + ".txt";
         string mut_file = output_prefix + "_fast_muts_" + to_string(sample_index) + ".txt";
         sample_index += 1;
-        arg.write(node_file, branch_file, recomb_file, mut_file);
+        // Async I/O: launch write in background thread
+        write_future = std::async(std::launch::async, [&, node_file, branch_file, recomb_file, mut_file]() {
+            arg.write(node_file, branch_file, recomb_file, mut_file);
+        });
         cout << "Number of trees: " << arg.recombinations.size() << endl;
         cout << "Number of flippings: " << arg.count_flipping() << endl;
+    }
+    // Wait for final write
+    if (write_future.valid()) {
+        write_future.wait();
     }
 }
 

@@ -125,6 +125,7 @@ void fast_BSP::regular_forward(double rho) {
     curr_index += 1;
     recomb_sum = inner_product(recomb_probs.begin(), recomb_probs.end(), forward_probs[curr_index - 1].begin(), 0.0);
     forward_probs.emplace_back(recomb_probs);
+    #pragma omp simd
     for (int i = 0; i < dim; i++) {
         forward_probs[curr_index][i] = forward_probs[curr_index - 1][i]*(1 - recomb_probs[i]) + recomb_sum*join_weights[i];
     }

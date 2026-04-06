@@ -12,6 +12,7 @@
 #include <map>
 #include <numeric>
 #include "Recombination.hpp"
+#include "MemoryPool.hpp"
 
 using namespace std;
 
@@ -53,6 +54,11 @@ public:
 };
 
 shared_ptr<Interval> create_interval(Branch b, double tl, double tu, int init_pos);
+
+// Global pool allocator for Interval objects used in BSP_smc
+MemoryPool<Interval> &get_interval_pool();
+Interval *pool_create_interval(Branch b, double tl, double tu, int init_pos);
+void pool_destroy_interval(Interval *ptr);
 
 struct compare_interval {
     

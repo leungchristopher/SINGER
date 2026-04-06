@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <chrono>
 #include <sstream>
+#include <future>
 #include "ARG.hpp"
 #include "Threader_smc.hpp"
 #include "Binary_emission.hpp"
@@ -38,6 +39,9 @@ public:
     int num_samples = 0;
     ARG arg;
     bool fast_mode = false;
+    bool lazy_coalescent = false;
+    bool smart_proposals = false;
+    std::future<void> write_future;
     double bsp_c = 0.01;
     double tsp_q = 0.05;
     int random_seed = 0;

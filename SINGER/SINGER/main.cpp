@@ -12,6 +12,8 @@ int main(int argc, const char * argv[]) {
     bool fast = false;
     bool resume = false;
     bool debug = false;
+    bool lazy_coalescent = false;
+    bool smart_proposals = false;
     double r = -1, m = -1, Ne = -1;
     int num_iters = 0;
     int spacing = 1;
@@ -219,6 +221,20 @@ int main(int argc, const char * argv[]) {
                 exit(1);
             }
         }
+        else if (arg == "-lazy_coalescent") {
+            if (i + 1 < argc && argv[i+1][0] != '-') {
+                cerr << "Error: -lazy_coalescent flag doesn't take any value. " << endl;
+                exit(1);
+            }
+            lazy_coalescent = true;
+        }
+        else if (arg == "-smart_proposals") {
+            if (i + 1 < argc && argv[i+1][0] != '-') {
+                cerr << "Error: -smart_proposals flag doesn't take any value. " << endl;
+                exit(1);
+            }
+            smart_proposals = true;
+        }
         else {
             cerr << "Error: Unknown flag. " << arg << endl;
             exit(1);
@@ -271,6 +287,8 @@ int main(int argc, const char * argv[]) {
     sampler.set_input_file_prefix(input_filename);
     sampler.set_output_file_prefix(output_prefix);
     sampler.fast_mode = fast;
+    sampler.lazy_coalescent = lazy_coalescent;
+    sampler.smart_proposals = smart_proposals;
     sampler.random_seed = seed;
     sampler.start = start_pos;
     sampler.end = end_pos;
