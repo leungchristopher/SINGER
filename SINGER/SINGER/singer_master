@@ -127,20 +127,18 @@ def calculate_diversity(vcf_file, start, end):
 
             # Iterate over the genotype columns to count allele occurrences
             for sample_field in fields[9:]:
-                gt = sample_field.split(':')[0]  # Extract the genotype (e.g., "0/1")
+                gt = sample_field.split(':')[0]  # Extract the genotype
                 if '.' in gt:  # Missing data
                     continue
-                
-                # Genotype fields are usually formatted like "0/1", "1/1", etc.
-                gt_alleles = gt.replace('|', '/').split('/')  # Handle phased/unphased
+
+                # Haploid: single allele per individual
                 num_samples += 1
-                for allele in gt_alleles:
-                    allele_counts[int(allele)] += 1
+                allele_counts[int(gt)] += 1
 
             # Calculate allele frequencies
             if num_samples == 0:
                 continue  # Skip if there are no valid samples
-            allele_freqs = [ac / (2 * num_samples) for ac in allele_counts]
+            allele_freqs = [ac / num_samples for ac in allele_counts]
             
             # Calculate diversity for the current variant
             variant_diversity = sum(f * (1 - f) for f in allele_freqs if f > 0 and f < 1)
@@ -155,7 +153,7 @@ def calculate_diversity(vcf_file, start, end):
 def compute_Ne(vcf_prefix, start, end, m):
     vcf_filename = vcf_prefix + ".vcf"
     diversity = calculate_diversity(vcf_filename, start, end)
-    Ne = diversity/4/m
+    Ne = diversity/2/m  # Haploid: E[pi] = 2*Ne*m
     return Ne 
 
 def run_rate_singer(Ne, m, r, start, end, vcf_prefix, output_prefix, num_iters, thin, polar, seed):
@@ -264,12 +262,83 @@ def resume_map_singer(Ne, mut_map_filename, recomb_map_filename, start, end, vcf
         sys.exit(1)
 
       
+def compute_mut_map(vcf_file, start, end, m, recomb_map_file, output_prefix):
+    # Load recombination map bins and filter to [start, end]
+    data = np.loadtxt(recomb_map_file, ndmin=2)
+    mask = (data[:, 1] > start) & (data[:, 0] < end)
+    bins = data[mask]
+
+    if len(bins) == 0:
+        mut_map_file = output_prefix + "_mut_map.txt"
+        np.savetxt(mut_map_file, [[start, end, m]], delimiter=' ', fmt='%g')
+        return mut_map_file
+
+    # Sliding window size: at least 5× average bin size or 1/10 the region
+    avg_bin_size = (end - start) / len(bins)
+    window_bp = max(5 * avg_bin_size, (end - start) / 10)
+
+    # Scan VCF once to collect per-site diversity values
+    site_positions = []
+    site_diversities = []
+    with open(vcf_file, 'r') as vcf:
+        for line in vcf:
+            if line.startswith('#'):
+                continue
+            fields = line.strip().split('\t')
+            pos = int(fields[1])
+            if pos < start:
+                continue
+            if pos > end:
+                break
+            alleles = [fields[3]] + fields[4].split(',')
+            allele_counts = [0] * len(alleles)
+            num_samples = 0
+            for sample_field in fields[9:]:
+                gt = sample_field.split(':')[0]
+                if '.' in gt:
+                    continue
+                num_samples += 1
+                allele_counts[int(gt)] += 1
+            if num_samples == 0:
+                continue
+            allele_freqs = [ac / num_samples for ac in allele_counts]
+            site_div = sum(f * (1 - f) for f in allele_freqs if 0 < f < 1)
+            site_positions.append(pos)
+            site_diversities.append(site_div)
+
+    site_positions = np.array(site_positions)
+    site_diversities = np.array(site_diversities)
+
+    # Global per-base diversity
+    pi_global = site_diversities.sum() / (end - start) if len(site_diversities) > 0 else 0
+
+    rows = []
+    for row in bins:
+        bin_start, bin_end, _ = row
+        effective_start = max(bin_start, start)
+        effective_end = min(bin_end, end)
+        bin_center = (effective_start + effective_end) / 2
+        win_start = bin_center - window_bp / 2
+        win_end = bin_center + window_bp / 2
+        if pi_global > 0 and len(site_positions) > 0:
+            win_mask = (site_positions >= win_start) & (site_positions <= win_end)
+            pi_bin = site_diversities[win_mask].sum() / window_bp
+            rate = m * (pi_bin / pi_global)
+        else:
+            rate = m
+        rows.append([effective_start, effective_end, rate])
+
+    mut_map_file = output_prefix + "_mut_map.txt"
+    np.savetxt(mut_map_file, rows, delimiter=' ', fmt='%g')
+    return mut_map_file
+
+
 def main():
     parser = argparse.ArgumentParser(description='Sample and infer ARG from genetic variation data')
 
     parser.add_argument('-Ne', type=float, default=-1, help='Effective population size.')
     parser.add_argument('-m', type=float, help='Mutation rate.')
-    parser.add_argument('-ratio', type=float, default=1, help='Recombination to mutation ratio. Default: 1.')
+    parser.add_argument('-r', type=float, help='Recombination rate. Default: same as mutation rate.')
     parser.add_argument('-recomb_map', type=str, help='Filename for the recombination rate map.')
     parser.add_argument('-mut_map', type=str, help='Filename for the mutation rate map.')
     parser.add_argument('-vcf', type=str, help='VCF file prefix (without .vcf extension).')
@@ -291,15 +360,27 @@ def main():
     if not args.m and not args.mut_map:
         parser.error("You must provide either -m or -mut_map")
 
+    # Default recombination rate to mutation rate if not specified
+    if args.r is None and args.m is not None:
+        args.r = args.m
+
 
     if args.m:
         if args.Ne < 0:
-            args.Ne = compute_Ne(args.vcf, args.start, args.end, args.m) 
-        if (args.resume):
-            resume_rate_singer(args.Ne, args.m, args.m*args.ratio, args.start, args.end, args.vcf, args.output, args.n, args.thin, args.polar, args.seed)
+            args.Ne = compute_Ne(args.vcf, args.start, args.end, args.m)
+        if args.recomb_map:
+            mut_map_file = compute_mut_map(args.vcf + ".vcf", args.start, args.end,
+                                           args.m, args.recomb_map, args.output)
+            if args.resume:
+                resume_map_singer(args.Ne, mut_map_file, args.recomb_map, args.start, args.end, args.vcf, args.output, args.n, args.thin, args.polar, args.seed)
+            else:
+                run_map_singer(args.Ne, mut_map_file, args.recomb_map, args.start, args.end, args.vcf, args.output, args.n, args.thin, args.polar, args.seed)
         else:
-            run_rate_singer(args.Ne, args.m, args.m*args.ratio, args.start, args.end, args.vcf, args.output, args.n, args.thin, args.polar, args.seed) 
-    return 
+            if args.resume:
+                resume_rate_singer(args.Ne, args.m, args.r, args.start, args.end, args.vcf, args.output, args.n, args.thin, args.polar, args.seed)
+            else:
+                run_rate_singer(args.Ne, args.m, args.r, args.start, args.end, args.vcf, args.output, args.n, args.thin, args.polar, args.seed)
+        return
 
     if args.mut_map and not args.m:
         args.m = compute_average_rate(args.mut_map, args.start, args.end) 

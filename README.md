@@ -52,7 +52,7 @@ The optional flags include:
 
 |flag|required?|details|  
 |-------------------|-----|---|  
-|**-Ne**|optional|the diploid effective population size, which means the haploid effective population size will be **2*Ne**|
+|**-Ne**|optional|the haploid effective population size|
 |**-ratio**|optional|the ratio between recombination and mutation rate, default at 1|
 |**-recomb_map**|optional|name of the file describing the recombination rate landscape|
 |**-n**|optional|the number of posterior samples, default at 100|
@@ -135,11 +135,11 @@ This script will:
 
 ## FAQ
 
-1. By far the most common bug is caused by not choosing the **-Ne, -m** parameter so that you roughly have $\pi=4\cdot N_e \cdot m\$. For example, some bioinformatics pipeline can remove polymorphic sites significantly. You'll have to either change (effective) mutation rate or effective population size. Another common case is centromeres with almost no sequenced sites, please make sure not to include such regions in SINGER;
+1. By far the most common bug is caused by not choosing the **-Ne, -m** parameter so that you roughly have $\pi=2\cdot N_e \cdot m\$. For example, some bioinformatics pipeline can remove polymorphic sites significantly. You'll have to either change (effective) mutation rate or effective population size. Another common case is centromeres with almost no sequenced sites, please make sure not to include such regions in SINGER;
    
 
 ## Suggestions from developer
 
 1. As a Bayesian sampling method, SINGER works best when you sample some ARGs from posterior, **only using one single sample is NOT ideal**. To this point, we highly encourage specifying **-n, -thin** flags. You can find how we run SINGER on real datasets on:
-2. It is of importance to carefully choose the parameters, such as -Ne, -m, and -ratio. We recommend first choosing the mutation rate m, and then based on average pairwise diversity \($\pi=4\cdot N_e \cdot m\$), you can decide the Ne parameter. If you are not super sure about the recombination rate, you can use the default ratio of 1. 
-3. Unfortunately for now we only support phased, high-quality genomes, and polymorphic sites with missingness will be excluded. We are working on incorporating missingness and unphased data in the near future. ARGweaver has better support in these regards.
+2. It is of importance to carefully choose the parameters, such as -Ne, -m, and -ratio. We recommend first choosing the mutation rate m, and then based on average pairwise diversity \($\pi=2\cdot N_e \cdot m\$), you can decide the Ne parameter. If you are not super sure about the recombination rate, you can use the default ratio of 1. 
+3. This version of SINGER supports haploid genomes. The VCF should contain a single allele per sample (e.g., `0` or `1`), not phased diploid genotypes.

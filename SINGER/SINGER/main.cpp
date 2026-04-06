@@ -57,7 +57,7 @@ int main(int argc, const char * argv[]) {
                 cerr << "Error: -Ne flag expects a number. " << endl;
                 exit(1);
             }
-            Ne = 2*Ne;
+            // Ne is used directly for haploid organisms (no 2x scaling).
         }
         else if (arg == "-r") {
             if (i + 1 >= argc || argv[i+1][0] == '-') {
@@ -224,13 +224,16 @@ int main(int argc, const char * argv[]) {
             exit(1);
         }
     }
-    if (r < 0) {
-        cerr << "-r flag missing or invalid value. " << endl;
-        exit(1);
-    }
-    if (m < 0) {
-        cerr << "-m flag missing or invalid value. " << endl;
-        exit(1);
+    bool using_rate_maps = (recomb_map_filename.size() > 0 && mut_map_filename.size() > 0);
+    if (!using_rate_maps) {
+        if (r < 0) {
+            cerr << "-r flag missing or invalid value. " << endl;
+            exit(1);
+        }
+        if (m < 0) {
+            cerr << "-m flag missing or invalid value. " << endl;
+            exit(1);
+        }
     }
     if (Ne < 0) {
         cerr << "-Ne flag missing or invalid value. " << endl;

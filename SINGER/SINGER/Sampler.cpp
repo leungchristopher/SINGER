@@ -71,13 +71,13 @@ void Sampler::naive_read_vcf(string prefix, double start_pos, double end_pos) {
                 fields.push_back(field);
             }
             num_individuals = (int) fields.size() - 9;
-            nodes.resize(2*num_individuals);
-            for (int i = 0; i < 2*num_individuals; i++) {
+            nodes.resize(num_individuals);
+            for (int i = 0; i < num_individuals; i++) {
                 nodes[i] = new_node(0.0);
                 nodes[i]->set_index(i);
                 sample_nodes.insert(nodes[i]);
             }
-            genotypes.resize(2*num_individuals);
+            genotypes.resize(num_individuals);
             continue;
         } else if (line[0] == '#') {
             continue; // skip these header lines
@@ -111,16 +111,8 @@ void Sampler::naive_read_vcf(string prefix, double start_pos, double end_pos) {
         }
         int individual_index = 0;
         while (iss >> genotype) {
-            if (genotype[0] == '1') {
-                genotypes[2*individual_index] = 1;
-            } else {
-                genotypes[2*individual_index] = 0;
-            }
-            if (genotype[2] == '1') {
-                genotypes[2*individual_index + 1] = 1;
-            } else {
-                genotypes[2*individual_index + 1] = 0;
-            }
+            // Haploid: one allele per individual
+            genotypes[individual_index] = (genotype[0] == '1') ? 1 : 0;
             individual_index += 1;
         }
         int genotype_sum = accumulate(genotypes.begin(), genotypes.end(), 0.0);
@@ -203,19 +195,11 @@ void Sampler::guide_read_vcf(string prefix, double start, double end) {
         }
         int individual_index = 0;
         while (iss >> genotype) {
-            if (genotypes.size() < 2*individual_index + 2) {
-                genotypes.resize(2*individual_index + 2);
+            // Haploid: one allele per individual
+            if (genotypes.size() < (size_t)(individual_index + 1)) {
+                genotypes.resize(individual_index + 1);
             }
-            if (genotype[0] == '1') {
-                genotypes[2*individual_index] = 1;
-            } else {
-                genotypes[2*individual_index] = 0;
-            }
-            if (genotype[2] == '1') {
-                genotypes[2*individual_index + 1] = 1;
-            } else {
-                genotypes[2*individual_index + 1] = 0;
-            }
+            genotypes[individual_index] = (genotype[0] == '1') ? 1 : 0;
             individual_index += 1;
         }
         if (nodes.size() == 0) {
@@ -554,6 +538,7 @@ void Sampler::internal_sample(int num_iters, int spacing) {
         rescale();
         random_seed = random_engine();
         write_sample();
+        write_sample_with_likelihood();
         arg.check_incompatibility();
         cout << "Start: " << arg.start << " , End: " << arg.end << endl;
         string node_file = output_prefix + "_nodes_" + to_string(sample_index) + ".txt";
@@ -586,6 +571,7 @@ void Sampler::fast_internal_sample(int num_iters, int spacing) {
         rescale();
         random_seed = random_engine();
         write_sample();
+        write_sample_with_likelihood();
         arg.check_incompatibility();
         cout << "Start: " << arg.start << " , End: " << arg.end << endl;
         string node_file = output_prefix + "_fast_nodes_" + to_string(sample_index) + ".txt";
@@ -758,6 +744,27 @@ void Sampler::write_sample() {
     << arg.end << "\t"
     << random_seed << "\t"
     << TSP::counter << endl;
+}
+
+void Sampler::write_sample_with_likelihood() {
+    string filename = output_prefix + "_likelihood.log";
+    ofstream file(filename, ios::out|ios::app);
+    if (!file) {
+        cerr << "Error opening the file: " << filename << endl;
+        return;
+    }
+    // Calculate log-likelihoods for current ARG sample
+    double prior_ll = arg.smc_prior_likelihood(recomb_rate);
+    double data_ll = arg.data_likelihood(mut_rate);
+    double total_ll = prior_ll + data_ll;
+
+    file << setprecision(numeric_limits<double>::max_digits10)
+    << sample_index << "\t"
+    << total_ll << "\t"
+    << prior_ll << "\t"
+    << data_ll << "\t"
+    << arg.recombinations.size() - 2 << "\t"
+    << arg.num_unmapped() << endl;
 }
 
 void Sampler::write_cut(tuple<double, Branch, double> cut_point) {

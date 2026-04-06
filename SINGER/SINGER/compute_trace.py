@@ -37,7 +37,7 @@ def incompatibility_trace(prefix, indices):
 
 def diversity_fit_mse(ts, m):
     windows = np.arange(0, ts.sequence_length, 1e6)
-    windows.append(ts.sequence_length)
+    windows = np.append(windows, ts.sequence_length)
     site_diversity = ts.diversity(windows=windows, mode='site')
     branch_diversity = ts.diversity(windows=windows, mode='branch')*m
     fit_mse = mse(site_diversity, branch_diversity)
@@ -52,7 +52,7 @@ def diversity_fit_trace(prefix, m, indices):
             fit_mse = diversity_fit_mse(ts, m)
             fit_mses.append(fit_mse)
         except FileNotFoundError:
-            print(f"File not found: {filename}")
+            print(f"File not found: {file_name}")
             fit_mses.append(None)
     return fit_mses
 
@@ -60,7 +60,7 @@ def diversity_fit_trace(prefix, m, indices):
 def main():
     parser = argparse.ArgumentParser(description='Compute traces for MCMC samples from SINGER.')
 
-    parser.add_argument('-prefix', type=float, default=-1, help='Effective population size.')
+    parser.add_argument('-prefix', type=str, required=True, help='Prefix of the ARG sample.')
     parser.add_argument('-m', type=float, help='Mutation rate.')
     parser.add_argument('-start_index', type=int, help='The start index of the ARG sample')
     parser.add_argument('-end_index', type=int, required=True, help='The end index of the ARG sample')
@@ -68,6 +68,22 @@ def main():
  
     args = parser.parse_args()
 
+    indices = range(args.start_index, args.end_index + 1)
+    
+    # Compute incompatibility trace
+    incompatibility_counts = incompatibility_trace(args.prefix, indices)
+    
+    # Compute diversity fit trace (if mutation rate provided)
+    if args.m is not None:
+        diversity_fits = diversity_fit_trace(args.prefix, args.m, indices)
+    
+    # Build and save results
+    df = pd.DataFrame({'index': list(indices), 'incompatibility': incompatibility_counts})
+    if args.m is not None:
+        df['diversity_fit_mse'] = diversity_fits
+    
+    df.to_csv(args.output_filename, index=False)
+    print(f"Traces saved to {args.output_filename}")
      
      
 

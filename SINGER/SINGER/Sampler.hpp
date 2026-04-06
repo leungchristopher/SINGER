@@ -122,7 +122,9 @@ public:
     void write_iterative_start();
     
     void write_sample();
-    
+
+    void write_sample_with_likelihood();
+
     void write_cut(tuple<double, Branch, double> cut_point);
     
     void load_resume_arg();

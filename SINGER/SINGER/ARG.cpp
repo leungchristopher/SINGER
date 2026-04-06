@@ -594,14 +594,18 @@ void ARG::map_mutations(double x, double y) {
     Tree tree = get_tree_at(x);
     auto recomb_it = recombinations.upper_bound(x);
     auto mut_it = mutation_sites.lower_bound(x);
-    double m = *mut_it;
-    while (*mut_it < y) {
-        m = *mut_it;
-        while (recomb_it->first < m) {
-            Recombination r = recomb_it->second;
-            tree.forward_update(r);
+
+    // Process all mutations in the range [x, y)
+    while (mut_it != mutation_sites.end() && *mut_it < y) {
+        double m = *mut_it;
+
+        // Apply all recombinations that occur before this mutation position
+        while (recomb_it != recombinations.end() && recomb_it->first < m) {
+            tree.forward_update(recomb_it->second);
             recomb_it++;
         }
+
+        // Map the current mutation
         map_mutation(tree, m);
         mut_it++;
     }
@@ -799,23 +803,34 @@ double ARG::smc_prior_likelihood(double r) {
     log_likelihood += tree.prior_likelihood();
     double tree_length = tree.length();
     auto recomb_it = recombinations.upper_bound(0);
+
+    // Pre-compute constant factor for efficiency
+    double r_Ne = r * Ne;
     double bin_start = 0;
     double bin_end = 0;
+
     for (int i = 0; i < bin_num; i++) {
         bin_start = coordinates[i];
         bin_end = coordinates[i+1];
-        rho = (bin_end - bin_start)*r*Ne;
-        if (bin_start == recomb_it->first) {
-            Recombination r = recomb_it->second;
-            recomb_it++;
-            log_likelihood -= rho*tree_length;
-            log_likelihood += log(rho*tree_length);
-            log_likelihood += tree.transition_likelihood(r);
-            tree.forward_update(r);
+        rho = (bin_end - bin_start) * r_Ne;
+
+        if (recomb_it != recombinations.end() && bin_start == recomb_it->first) {
+            // Recombination occurs in this bin
+            Recombination &recomb = recomb_it->second;
+            double rho_tree_len = rho * tree_length;
+
+            log_likelihood -= rho_tree_len;
+            log_likelihood += log(rho_tree_len);
+            log_likelihood += tree.transition_likelihood(recomb);
+
+            // Update tree and recalculate length only after recombination
+            tree.forward_update(recomb);
             tree_length = tree.length();
             assert(tree_length > 0);
+            recomb_it++;
         } else {
-            log_likelihood -= rho*tree_length;
+            // No recombination - just subtract the prior contribution
+            log_likelihood -= rho * tree_length;
         }
         assert(!isnan(log_likelihood));
     }
@@ -840,7 +855,7 @@ double ARG::data_likelihood(double m) {
             recomb_it++;
             tree.forward_update(r);
         }
-        while (mut_it != mutation_sites.end()) {
+        while (mut_it != mutation_sites.end() && *mut_it < bin_end) {
             next_mut_pos = min(sequence_length, *mut_it);
             theta = m*Ne;
             log_likelihood += tree.data_likelihood(theta, next_mut_pos);

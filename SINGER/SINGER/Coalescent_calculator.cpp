@@ -28,17 +28,26 @@ double Coalescent_calculator::weight(double lb, double ub) {
 }
 
 double Coalescent_calculator::time(double lb, double ub) {
+    // Early termination for infinite upper bound case
+    if (isinf(ub)) {
+        return lb + log(2);
+    }
+
+    // Check interval size before expensive prob() computations
+    if (ub - lb < 1e-3) {
+        return 0.5 * (lb + ub);
+    }
+
     double lq = prob(lb);
     double uq = prob(ub);
     double mid = 0;
     double t;
-    if (isinf(ub)) {
-        return lb + log(2);
-    }
-    if (ub - lb < 1e-3 or uq - lq < 1e-3) {
-        t = 0.5*(lb + ub);
+
+    // Check probability difference
+    if (uq - lq < 1e-3) {
+        t = 0.5 * (lb + ub);
     } else {
-        mid = 0.5*(lq + uq);
+        mid = 0.5 * (lq + uq);
         t = quantile(mid);
     }
     assert(t >= lb and t <= ub);
